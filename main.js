@@ -1,8 +1,4 @@
 "use script";
-const pry = require('pryjs')
-const {app, BrowserWindow, ipcMain} = require('electron');
-const path = require('path');
-const url = require('url');
 
 const Config = require('ssb-config/inject')('testnet', {port: 9999})
 const Client = require('ssb-client')
@@ -11,39 +7,66 @@ const schemas = require('ssb-mutual/schemas')
 const ssbKeys = require("ssb-keys")
 const ref = require('ssb-ref')
 
-var pull = require('pull-stream')
-var pullParaMap = require('pull-paramap')
-var pullAbortable = require('pull-abortable')
-var get = require('lodash/get')
+const pull = require('pull-stream')
+const pullParaMap = require('pull-paramap')
+const pullAbortable = require('pull-abortable')
+const get = require('lodash/get')
 
-var keys = ssbKeys.loadOrCreateSync('./app-private.key')
+// For Linux distros...
+const keys = ssbKeys.loadOrCreateSync(`/home/${process.env.USER}/.ssb-test/secret`)
+const Account = schemas.account(keys.id)
 
-Client(keys, (err, sbot, Config) => {
-  if (err) throw err
+const { app, BrowserWindow, ipcMain } = require('electron')
+const path = require('path')
+const url = require('url')
 
-  var mutual = Mutual.init(sbot, Config)
-  var account = schemas.account(keys.id)
-  sbot.publish(account)
+let win
 
-  var transaction = {
-    type: "mutual/credit",
-    account: keys.id,
-    amount: 5,
-    currency: "MMT",
-    memo: "first"
+var createWindow = () => {
+  win = new BrowserWindow({width: 800, height: 600})
+
+  win.loadURL(url.format({
+    pathname: path.join(__dirname, 'index.html'),
+    protocol: 'file:',
+    slashes: true
+  }))
+
+  win.webContents.openDevTools()
+
+  win.on('closed', () => {
+    win = null
+  })
+}
+
+app.on('ready', createWindow)
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
   }
+})
 
-  var value = schemas.credit(keys.id, 5, "MMT", "first")
-  sbot.publish(value, (err, msg) => {
-    console.log(msg)
-  })
+app.on('activate', () => {
+  if (win === null) {
+    createWindow()
+  }
+})
 
-  var value = schemas.credit(keys.id, 50, "MMT", "second")
-  sbot.publish(value, (err, msg) => {
-    console.log(msg)
-  })
-
-  mutual.getAccountBalances(keys.id, (err, amount) => {
-    console.log(amount)
+ipcMain.on('sendCurrency', (event, data) => {
+  // Publish to sbot
+  Client(keys, (err, sbot, Config) => {
+    if (err) throw err
+    var mutual = Mutual.init(sbot, Config)
+    var value = schemas.credit(keys.id, 5, "MMT", "first")
+    sbot.publish(value, (err, msg) => {
+      event.sender.send('sentCurrency', msg)
+    })
   })
 })
+
+ipcMain.on('getPeeps', (event) => {
+  Client(keys, (err, sbot, Config) => {
+    if (err) throw err
+  })
+})
+
