@@ -1,0 +1,3 @@
+node_modules/
+app-private.key
+package-lock.json
